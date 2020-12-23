@@ -117,6 +117,11 @@
                 if (dt.settings()[0].oInit.onEditRow)
                     that.onEditRow = dt.settings()[0].oInit.onEditRow;
 
+                that.closeModalOnSuccess = dt.settings()[0].oInit.closeModalOnSuccess;
+                if (that.closeModalOnSuccess === undefined) {
+                    that.closeModalOnSuccess = true;
+                }
+
                 this._setup();
 
                 dt.on('destroy.altEditor', function () {
@@ -142,7 +147,8 @@
                 this.random_id = ("" + Math.random()).replace(".", "");
                 var modal_id = 'altEditor-modal-' + this.random_id;
                 this.modal_selector = '#' + modal_id;
-                this.language = DataTable.settings.values().next().value.oLanguage.altEditor || {};
+                this.language = dt.settings()[0].oLanguage.altEditor || {};
+                
                 this.language.modalClose = this.language.modalClose || 'Close';
                 this.language.edit = this.language.edit || {};
                 this.language.edit = { title: this.language.edit.title || 'Edit record',
@@ -163,12 +169,13 @@
                                         required: this.language.error.required || 'Field is required',
                                         unique: this.language.error.unique || 'Duplicated field'
                                       };
-                var modal = '<div class="modal fade" id="' + modal_id + '" tabindex="-1" role="dialog">' +
+
+                var modal = '<div class="modal fade altEditor-modal reveal" id="' + modal_id + '" tabindex="-1" role="dialog" data-reveal>' +
                     '<div class="modal-dialog">' +
                     '<div class="modal-content">' +
                     '<div class="modal-header">' +
                     '<h4 style="padding-top: 1rem;padding-left: 1rem;" class="modal-title"></h4>' +
-                    '<button style="margin: initial;" type="button" class="close" data-dismiss="modal" aria-label="' + this.language.modalClose + '">' +
+                    '<button style="margin: initial;" type="button" class="close close-button" data-dismiss="modal" data-close aria-label="' + this.language.modalClose + '">' +
                     '<span aria-hidden="true">&times;</span></button>' +
                     '</div>' +
                     '<div class="modal-body">' +
@@ -226,7 +233,7 @@
                         });
                     });
                 }
-                
+
                 // bind 'unique' error messages
                 $(this.modal_selector).bind('input', '[data-unique]', function(elm) {
                     if ($(elm.target).attr('data-unique') == null || $(elm.target).attr('data-unique') === 'false') {
@@ -246,7 +253,7 @@
                         }
                     }
                 });
-                        
+
                 // add Refresh button
                 if (this.s.dt.button('refresh:name')) {
                     this.s.dt.button('refresh:name').action(function (e, dt, node, config) {
@@ -278,24 +285,24 @@
              * @private
              */
             _openEditModal: function () {
-                
+
                 var dt = this.s.dt;
                 var adata = dt.rows({
                     selected: true
                 });
-                
+
                 var columnDefs = this.completeColumnDefs();
                 var data = this.createDialog(columnDefs, this.language.edit.title, this.language.edit.button,
                     this.language.modalClose, 'editRowBtn', 'altEditor-edit-form');
 
                 var selector = this.modal_selector;
-                
+
                 for (var j in columnDefs) {
                     if (columnDefs[j].name != null) {
                         var arrIndex = columnDefs[j].name.toString().split(".");
                         var selectedValue = adata.data()[0];
                         for (var index = 0; index < arrIndex.length; index++) {
-                            selectedValue = selectedValue[arrIndex[index]];
+                            if (selectedValue) selectedValue = selectedValue[arrIndex[index]];
                         }
                         var jquerySelector = "#" + columnDefs[j].name.toString().replace(/\./g, "\\.");
                         $(selector).find(jquerySelector).val(selectedValue);    // this._quoteattr or not? see #121
@@ -317,7 +324,7 @@
                         }
                     }
                 }
-                
+
                 $(selector + ' input[0]').trigger('focus');
                 $(selector).trigger("alteditor:some_dialog_opened").trigger("alteditor:edit_dialog_opened");
             },
@@ -357,12 +364,12 @@
                         });
                     }
                 });
-                
+
                 // Getting the checkbox from the modal
                 $('form[name="altEditor-edit-form-' + this.random_id + '"] *').filter(':input[type="checkbox"]').each(function (i) {
                     rowDataArray[$(this).attr('id')] = this.checked;
                 });
-                
+
                 console.log(rowDataArray); //DEBUG
 
                 var checkFilesQueued = function() {
@@ -377,7 +384,7 @@
                         setTimeout(checkFilesQueued, 1000);
                     }
                 };
-                
+
                 checkFilesQueued();
             },
 
@@ -387,7 +394,7 @@
              * @private
              */
             _openDeleteModal: function () {
-                
+
                 var that = this;
                 var dt = this.s.dt;
                 var adata = dt.rows({
@@ -400,28 +407,56 @@
                 // we should use createDialog()
                 // var data = this.createDialog(columnDefs, this.language.delete.title, this.language.delete.button,
                 //      this.language.modalClose, 'deleteRowBtn', 'altEditor-delete-form');
-                
+
                 // Building delete-modal
                 var data = "";
 
                 for (var j in columnDefs) {
+                    if (columnDefs[j].name == null) continue;
                     if (columnDefs[j].type.indexOf("hidden") >= 0) {
                         data += "<input type='hidden' id='" + columnDefs[j].title + "' value='" + adata.data()[0][columnDefs[j].name] + "'></input>";
                     }
                     else if (columnDefs[j].type.indexOf("file") < 0) {
                         var arrIndex = columnDefs[j].name.toString().split(".")
-                        var fvalue = adata.data()[0];
+                        var fvalue = adata.data()[0];  //fvalue is the value that will appear to user
                         for (var index = 0; index < arrIndex.length; index++) {
-                            fvalue = fvalue[arrIndex[index]];
+                            if (fvalue) fvalue = fvalue[arrIndex[index]];
                         }
 
-                        //added dateFormat
+                        // fix dateFormat
                         if (columnDefs[j].type.indexOf("date") >= 0) {
                             if (columnDefs[j].dateFormat !== "") {
                                 var mDate = moment(adata.data()[0][columnDefs[j].name]);
                                 if (mDate && mDate.isValid()) {
                                     fvalue = mDate.format(columnDefs[j].dateFormat);
                                 }
+                            }
+                        }
+
+                        // fix select
+                        if (columnDefs[j].type.indexOf("select") >= 0) {
+                            var options = columnDefs[j].options;
+
+                            var mapper = function(x) {
+                                if (options.length === undefined) {
+                                    // options is a map
+                                    return x in options ? options[x] : null;
+                                } else {
+                                    // options is an array
+                                    return x;
+                                }
+                            }
+
+                            if (fvalue instanceof Array) {
+                                // multiselect
+                                var mapped = fvalue.map(mapper)
+                                    .filter(function (x) {
+                                        return x != null;
+                                    });
+                                fvalue = mapped.join(', ');
+                            } else {
+                                // usual select
+                                fvalue = mapper(fvalue);
                             }
                         }
                         
@@ -443,9 +478,9 @@
                 }
 
                 var selector = this.modal_selector;
-                $(selector).on('show.bs.modal', function () {
-                    var btns = '<button type="button" data-content="remove" class="btn btn-default" data-dismiss="modal">' + that.language.modalClose + '</button>' +
-                        '<button type="submit"  data-content="remove" class="btn btn-danger" id="deleteRowBtn">' + that.language.delete.button + '</button>';
+                var fill = function () {
+                    var btns = '<button type="button" data-content="remove" class="btn btn-default button secondary" data-close data-dismiss="modal">' + that.language.modalClose + '</button>' +
+                        '<button type="submit"  data-content="remove" class="btn btn-danger button" id="deleteRowBtn">' + that.language.delete.button + '</button>';
                     $(selector).find('.modal-title').html(that.language.delete.title);
                     $(selector).find('.modal-body').html(data);
                     $(selector).find('.modal-footer').html(btns);
@@ -456,9 +491,9 @@
                     } else {
                         modalContent.wrap("<form name='" + formName + "' id='" + formName + "' role='form'></form>");
                     }
-                });
+                };
 
-                $(selector).modal('show');
+                this.internalOpenDialog(selector, fill);
                 $(selector + ' input[0]').trigger('focus');
                 $(selector).trigger("alteditor:some_dialog_opened").trigger("alteditor:delete_dialog_opened");
             },
@@ -478,7 +513,7 @@
 
                 // Getting the IDs and Values of the tablerow
                 for (var i = 0; i < dt.context[0].aoColumns.length; i++) {
-                    // .data is the attribute name, if any; .idx is the column index, so it should always exists 
+                    // .data is the attribute name, if any; .idx is the column index, so it should always exists
                     var name = dt.context[0].aoColumns[i].data ? dt.context[0].aoColumns[i].data :
                             dt.context[0].aoColumns[i].mData ? dt.context[0].aoColumns[i].mData :
                             dt.context[0].aoColumns[i].idx;
@@ -506,7 +541,7 @@
                 $(selector + ' input[0]').trigger('focus');
                 $(selector).trigger("alteditor:some_dialog_opened").trigger("alteditor:add_dialog_opened");
             },
-            
+
             /**
             * Complete DataTable.context[0].aoColumns with default values
             */
@@ -544,7 +579,7 @@
                 }
                 return columnDefs;
             },
-            
+
             /**
             * Create both Edit and Add dialogs
             * @param columnDefs as returned by completeColumnDefs()
@@ -553,7 +588,7 @@
                 formName = [formName, this.random_id].join('-');
                 var data = "";
                 for (var j in columnDefs) {
-                    
+
                     //handle hidden fields
                     if (columnDefs[j].type.indexOf("hidden") >= 0) {
                         data += "<input type='hidden' id='" + columnDefs[j].name + "' ></input>";
@@ -609,7 +644,7 @@
                                 + ">" + options
                                 + "</select>";
                         }
-                        //Adding Text Area 
+                        //Adding Text Area
                         else if (columnDefs[j].type.indexOf("textarea") >= 0)
                         {
                             data += "<textarea class='form-control' id='" + this._quoteattr(columnDefs[j].name)
@@ -655,11 +690,11 @@
                     }
                 }
                 // data += "</form>";
-                
+
                 var selector = this.modal_selector;
-                $(selector).on('show.bs.modal', function () {
-                    var btns = '<button type="button" data-content="remove" class="btn btn-default" data-dismiss="modal">'+closeCaption+'</button>' +
-                        '<button type="submit" form="' + formName + '" data-content="remove" class="btn btn-primary" id="'+buttonClass+'">'+buttonCaption+'</button>';
+                var fill = function () {
+                    var btns = '<button type="button" data-content="remove" class="btn btn-default button secondary" data-dismiss="modal" data-close>'+closeCaption+'</button>' +
+                        '<button type="submit" form="' + formName + '" data-content="remove" class="btn btn-primary button" id="'+buttonClass+'">'+buttonCaption+'</button>';
                     $(selector).find('.modal-title').html(title);
                     $(selector).find('.modal-body').html(data);
                     $(selector).find('.modal-footer').html(btns);
@@ -670,11 +705,11 @@
                     } else {
                         modalContent.wrap("<form name='" + formName + "' id='" + formName + "' role='form'></form>");
                     }
-                });
+                };
 
-                $(selector).modal('show');
+                this.internalOpenDialog(selector, fill);
                 $(selector + ' input[0]').trigger('focus');
-                
+
                 var that = this;
 
                 // enable select 2 items, datepicker, datetimepickerm
@@ -710,7 +745,7 @@
                     }
                 }
             },
-            
+
             /**
              * Callback for "Add" button
              */
@@ -724,7 +759,7 @@
                 $('form[name="altEditor-add-form-' + this.random_id + '"] *').filter(':input[type!="file"]').each(function (i) {
                     rowDataArray[$(this).attr('id')] = $(this).val();
                 });
-                    
+
                 //Getting the textArea from the modal
                 $('form[name="altEditor-add-form-' + this.random_id + '"] *').filter('textarea').each(function (i) {
                     rowDataArray[$(this).attr('id')] = $(this).val();
@@ -741,12 +776,12 @@
                         });
                     }
                 });
-                
+
                 // Getting the checkbox from the modal
                 $('form[name="altEditor-add-form-' + this.random_id + '"] *').filter(':input[type="checkbox"]').each(function (i) {
                     rowDataArray[$(this).attr('id')] = this.checked;
                 });
-                
+
                 console.log(rowDataArray); //DEBUG
 
                 var checkFilesQueued = function() {
@@ -773,10 +808,14 @@
                     var selector = this.modal_selector;
                     $(selector + ' .modal-body .alert').remove();
 
-                    var message = '<div class="alert alert-success" role="alert">' +
-                        '<strong>' + this.language.success + '</strong>' +
-                        '</div>';
-                    $(selector + ' .modal-body').append(message);
+                    if (this.closeModalOnSuccess) {
+                        this.internalCloseDialog(selector);
+                    } else {
+                        var message = '<div class="alert alert-success" role="alert">' +
+                            '<strong>' + this.language.success + '</strong>' +
+                            '</div>';
+                        $(selector + ' .modal-body').append(message);
+                    }
 
                     this.s.dt.row({
                         selected : true
@@ -793,17 +832,21 @@
              * Called after a row has been inserted on server
              */
             _addRowCallback: function (response, status, more) {
-                
+
                     //TODO should honor dt.ajax().dataSrc
-                    
+
                     var data = (typeof response === "string") ? JSON.parse(response) : response;
                     var selector = this.modal_selector;
                     $(selector + ' .modal-body .alert').remove();
 
-                    var message = '<div class="alert alert-success" role="alert">' +
-                        '<strong>' + this.language.success + '</strong>' +
-                        '</div>';
-                    $(selector + ' .modal-body').append(message);
+                    if (this.closeModalOnSuccess) {
+                        this.internalCloseDialog(selector);
+                    } else {
+                        var message = '<div class="alert alert-success" role="alert">' +
+                            '<strong>' + this.language.success + '</strong>' +
+                            '</div>';
+                        $(selector + ' .modal-body').append(message);
+                    }
 
                     this.s.dt.row.add(data).draw(false);
 
@@ -819,15 +862,19 @@
             _editRowCallback: function (response, status, more) {
 
                     //TODO should honor dt.ajax().dataSrc
-                    
+
                     var data = (typeof response === "string") ? JSON.parse(response) : response;
                     var selector = this.modal_selector;
                     $(selector + ' .modal-body .alert').remove();
 
-                    var message = '<div class="alert alert-success" role="alert">' +
-                        '<strong>' + this.language.success + '</strong>' +
-                        '</div>';
-                    $(selector + ' .modal-body').append(message);
+                    if (this.closeModalOnSuccess) {
+                        this.internalCloseDialog(selector);
+                    } else {
+                        var message = '<div class="alert alert-success" role="alert">' +
+                            '<strong>' + this.language.success + '</strong>' +
+                            '</div>';
+                        $(selector + ' .modal-body').append(message);
+                    }
 
                     this.s.dt.row({
                         selected : true
@@ -860,7 +907,7 @@
 
                     $(selector + ' .modal-body').append(message);
             },
-            
+
             /**
              * Default callback for insertion: mock webservice, always success.
              */
@@ -884,7 +931,51 @@
                 console.log("Missing AJAX configuration for DELETE");
                 success(rowdata);
             },
+
+            /**
+             * Open a dialog using available framework
+             */
+            internalOpenDialog(selector, onopen) {
+                var $sel = $(selector);
+                if ($sel.modal) {
+                    // Bootstrap
+                    $sel.on('show.bs.modal', onopen);
+                    $sel.modal('show');
+
+                } else if ($sel.foundation){
+                    // Foundation
+                    $sel.on('open.zf.reveal', onopen);
+                    $sel.on('closed.zf.reveal', function() { $('.reveal-overlay').hide(); });
+                    var popup = new Foundation.Reveal($sel);
+                    popup.open();
+
+                } else {
+                    console.error('You must load Bootstrap or Foundation in order to open modal dialogs');
+                    return;
+                }
+            },
             
+            /**
+             * Close a dialog using available framework
+             */
+            internalCloseDialog(selector) {
+                var $sel = $(selector);
+                if ($sel.modal) {
+                    // Bootstrap
+                    $sel.modal('hide');
+
+                } else if ($sel.foundation){
+                    // Foundation
+                    var popup = new Foundation.Reveal($sel);
+                    popup.close();
+                    $('.reveal-overlay').hide();
+
+                } else {
+                    console.error('You must load Bootstrap or Foundation in order to open modal dialogs');
+                    return;
+                }
+            },
+
             /**
              * Dinamically reload options in SELECT menu
             */
@@ -907,7 +998,7 @@
                 $select.val(oldValue); // if still present, of course
                 $select.trigger('change');
             },
-            
+
             /**
              * Convert file to Base 64 form
              * @see https://stackoverflow.com/questions/36280818
